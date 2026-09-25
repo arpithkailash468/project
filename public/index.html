@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Before You Apply</title>
+<style>
+:root{
+  --bg:#f6f5f2; --card:#ffffff; --ink:#142420; --sub:#5b6b65;
+  --accent:#123C31; --amber:#F2A93B; --line:#e4e1da; --bad:#c1443b; --ok:#2f6e5e;
+}
+*{box-sizing:border-box;}
+body{margin:0; background:var(--bg); color:var(--ink); font-family:-apple-system,Segoe UI,Roboto,sans-serif; display:flex; justify-content:center;}
+.wrap{width:100%; max-width:600px; padding:30px 20px 50px;}
+h1{font-size:1.4rem; margin:0 0 2px;}
+.sub{color:var(--sub); font-size:.9rem; margin:0 0 18px;}
+.api-tag{display:inline-block; font-size:.72rem; font-weight:700; letter-spacing:.05em; color:var(--accent); background:#e4f1ea; padding:3px 8px; border-radius:20px; margin-bottom:14px;}
+.card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px; margin-bottom:14px;}
+.opt{display:block; width:100%; text-align:left; padding:13px 16px; margin-bottom:9px; border:1px solid var(--line); border-radius:10px; background:transparent; color:var(--ink); font-size:.96rem; cursor:pointer;}
+.opt.sel{border-color:var(--accent); background:#eef4f1;}
+.q{margin-bottom:16px;}
+.q label{display:block; font-weight:600; margin-bottom:5px; font-size:.94rem;}
+.q .why{color:var(--sub); font-size:.8rem; margin-bottom:8px;}
+.row{display:flex; gap:8px;}
+.row .opt{flex:1; text-align:center;}
+.btn{padding:12px 20px; border-radius:10px; border:none; background:var(--accent); color:#fff; font-weight:600; cursor:pointer;}
+.btn.ghost{background:transparent; color:var(--accent); border:1px solid var(--accent);}
+.actions{display:flex; justify-content:space-between; margin-top:18px; gap:10px;}
+.badge{display:inline-block; padding:5px 12px; border-radius:20px; font-size:.82rem; font-weight:700; margin-bottom:12px;}
+.badge.eligible{background:#e4f1ea; color:var(--ok);}
+.badge.borderline{background:#fdecd2; color:#a3660f;}
+.badge.unlikely,.badge.blocked{background:#fbe7e5; color:var(--bad);}
+.scorebar{margin:10px 0;}
+.scorebar .lbl{display:flex; justify-content:space-between; font-size:.78rem; color:var(--sub); margin-bottom:4px;}
+.scorebar .track{height:8px; background:var(--line); border-radius:6px; overflow:hidden;}
+.scorebar .fill{height:100%; background:var(--accent);}
+.doclist{list-style:none; margin:14px 0 0; padding:0;}
+.doclist li{display:flex; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); font-size:.9rem;}
+.doclist li:last-child{border-bottom:none;}
+.doclist li.flag{color:#a3660f; font-weight:600;}
+.breakdown{margin-top:14px; font-size:.82rem; color:var(--sub);}
+.breakdown div{display:flex; justify-content:space-between; padding:3px 0;}
+.toggle{font-size:.78rem; color:var(--accent); cursor:pointer; text-decoration:underline; background:none; border:none; padding:0; margin-top:10px;}
+footer{text-align:center; color:var(--sub); font-size:.75rem; margin-top:8px;}
+.err{color:var(--bad); font-size:.85rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Before You Apply</h1>
+  <p class="sub">Know what's needed, how long it'll take, and whether you qualify — before you start the real form.</p>
+  <span class="api-tag">LIVE · backed by /api/evaluate</span>
+  <div id="app">Loading processes…</div>
+  <footer>Every check is scored server-side and logged for audit at <code>/api/audit</code>.</footer>
+</div>
+<script>
+let PROCESSES = null;
+let state = { step: 1, processKey: null, answers: {}, result: null, showBreakdown: false };
+
+async function loadProcesses() {
+  const res = await fetch("/api/processes");
+  PROCESSES = await res.json();
+  render();
+}
+
+async function submitEvaluation() {
+  const res = await fetch(`/api/evaluate/${state.processKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answers: state.answers }),
+  });
+  state.result = await res.json();
+  state.step = 3;
+  render();
+}
+
+function el(tag, cls) { const e = document.createElement(tag); if (cls) e.className = cls; return e; }
+
+function render() {
+  const app = document.getElementById("app");
+  app.innerHTML = "";
+
+  if (state.step === 1) {
+    const card = el("div", "card");
+    card.innerHTML = `<div class="q"><label>What are you about to apply for?</label></div>`;
+    Object.entries(PROCESSES).forEach(([key, p]) => {
+      const b = el("button", "opt" + (state.processKey === key ? " sel" : ""));
+      b.innerHTML = `${p.icon} <b>${p.label}</b>`;
+      b.onclick = () => { state.processKey = key; state.answers = {}; state.step = 2; render(); };
+      card.appendChild(b);
+    });
+    app.appendChild(card);
+  }
+
+  else if (state.step === 2) {
+    const proc = PROCESSES[state.processKey];
+    const card = el("div", "card");
+    proc.questions.forEach((q) => {
+      const wrap = el("div", "q");
+      wrap.innerHTML = `<label>${q.label}</label><div class="why">${q.why}</div>`;
+      const row = el("div", "row");
+      q.options.forEach((o) => {
+        const b = el("button", "opt" + (state.answers[q.id] === o.value ? " sel" : ""));
+        b.textContent = o.label;
+        b.onclick = () => { state.answers[q.id] = o.value; render(); };
+        row.appendChild(b);
+      });
+      wrap.appendChild(row);
+      card.appendChild(wrap);
+    });
+    app.appendChild(card);
+
+    const allAnswered = proc.questions.every((q) => state.answers[q.id]);
+    const actions = el("div", "actions");
+    const back = el("button", "btn ghost"); back.textContent = "Back";
+    back.onclick = () => { state.step = 1; render(); };
+    const next = el("button", "btn"); next.textContent = "Get my result";
+    next.style.opacity = allAnswered ? 1 : 0.5;
+    next.onclick = () => { if (allAnswered) submitEvaluation(); };
+    actions.appendChild(back); actions.appendChild(next);
+    app.appendChild(actions);
+  }
+
+  else if (state.step === 3) {
+    const r = state.result;
+    const card = el("div", "card");
+    card.innerHTML = `<span class="badge ${r.status}">${r.statusLabel}</span>`;
+
+    const bars = el("div");
+    bars.innerHTML = `
+      <div class="scorebar">
+        <div class="lbl"><span>Eligibility confidence</span><span>${r.eligibilityScore ?? "—"}%</span></div>
+        <div class="track"><div class="fill" style="width:${r.eligibilityScore ?? 0}%"></div></div>
+      </div>
+      <div class="scorebar">
+        <div class="lbl"><span>Readiness (documents/logistics)</span><span>${r.readinessScore ?? "—"}%</span></div>
+        <div class="track"><div class="fill" style="width:${r.readinessScore ?? 0}%; background:var(--amber)"></div></div>
+      </div>
+      <div class="scorebar"><div class="lbl"><span>Estimated time to apply</span><span>${r.time}</span></div></div>
+    `;
+    card.appendChild(bars);
+
+    const list = el("ul", "doclist");
+    r.docs.forEach((d) => {
+      const li = document.createElement("li");
+      li.className = d.flagged ? "flag" : "";
+      li.textContent = (d.flagged ? "⚠ " : "☐ ") + d.label;
+      list.appendChild(li);
+    });
+    card.appendChild(list);
+
+    const toggle = el("button", "toggle");
+    toggle.textContent = state.showBreakdown ? "Hide score breakdown" : "Show score breakdown";
+    toggle.onclick = () => { state.showBreakdown = !state.showBreakdown; render(); };
+    card.appendChild(toggle);
+
+    if (state.showBreakdown) {
+      const bd = el("div", "breakdown");
+      [...r.breakdown.eligibility, ...r.breakdown.readiness].forEach((b) => {
+        const row = el("div");
+        row.innerHTML = `<span>${b.question}: ${b.answer}</span><span>${b.contribution}%</span>`;
+        bd.appendChild(row);
+      });
+      card.appendChild(bd);
+    }
+
+    app.appendChild(card);
+    const actions = el("div", "actions");
+    const back = el("button", "btn ghost"); back.textContent = "Back";
+    back.onclick = () => { state.step = 2; render(); };
+    const restart = el("button", "btn"); restart.textContent = "Check another process";
+    restart.onclick = () => { state = { step: 1, processKey: null, answers: {}, result: null, showBreakdown: false }; render(); };
+    actions.appendChild(back); actions.appendChild(restart);
+    app.appendChild(actions);
+  }
+}
+
+loadProcesses().catch((e) => {
+  document.getElementById("app").innerHTML = `<div class="err">Could not reach the API: ${e}</div>`;
+});
+</script>
+</body>
+</html>
